@@ -160,6 +160,18 @@ def _display(result: SyncResult, list_name: str) -> None:
             "  Warning: MDBList could not match some provider IDs; "
             "those entries were not added or removed."
         )
+        if result.not_found_items:
+            print("  Not found items:")
+            for item in result.not_found_items:
+                identifiers = []
+                if item.provider_id is not None:
+                    identifiers.append(
+                        f"{item.provider.upper()}: {item.provider_id}"
+                    )
+                if item.imdb_id:
+                    identifiers.append(f"IMDb: {item.imdb_id}")
+                suffix = f" [{', '.join(identifiers)}]" if identifiers else ""
+                print(f"    - {item.title}{suffix}")
 
 
 def run(args: argparse.Namespace) -> int:

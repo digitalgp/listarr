@@ -25,6 +25,14 @@ class MediaItem:
 
 
 @dataclass(frozen=True)
+class NotFoundItem:
+    title: str
+    provider: str
+    provider_id: int | None
+    imdb_id: str | None
+
+
+@dataclass(frozen=True)
 class SyncResult:
     source: str
     list_id: int | None
@@ -36,3 +44,4 @@ class SyncResult:
     existing: int
     not_found: int
     dry_run: bool
+    not_found_items: tuple[NotFoundItem, ...] = ()

@@ -22,6 +22,7 @@ The original and modified work are distributed under the MIT License. See
 - Incremental add/remove synchronization
 - Append (`--cat`), wipe, filtering, dry-run, and cursor pagination
 - Actual added, removed, existing, and not-found result reporting
+- Detailed title and provider-ID output for items MDBList cannot match
 - Rate-limit handling using MDBList's `Retry-After` response header
 - No Trakt credentials or Trakt API calls
 
@@ -96,14 +97,33 @@ After a real synchronization, Listarr reports both planned and accepted
 changes. For example:
 
 ```text
-[Sonarr] SYNCED -> MDBList 201379
-  Selected: 950  Added: 933/950  Removed: 0/0  Existing: 0  Not found: 17
+[Sonarr] SYNCED -> MDBList 12345
+  Selected: 100  Added: 97/100  Removed: 0/0  Existing: 0  Not found: 3
   Warning: MDBList could not match some provider IDs; those entries were not added or removed.
+  Not found items:
+    - Example rejected show [TVDB: 123456, IMDb: tt1234567]
+    - Example without IMDb [TVDB: 234567]
 ```
 
 `Not found` means MDBList could not match the supplied TMDB, TVDB, or IMDb ID.
 These entries remain absent from the destination list and are not counted as
 successfully added.
+
+### API request behavior for not-found details
+
+MDBList may return only a count for `not_found`, without the corresponding
+titles or IDs. Listarr keeps request usage low while still producing exact
+details:
+
+- no `not_found`: no additional verification request;
+- every attempted item is `not_found`: no additional request, because Listarr
+  already knows all rejected request items;
+- partial `not_found`: one additional paginated list traversal identifies the
+  exact rejected items;
+- no per-title lookup requests are used.
+
+MDBList pages contain up to 1000 items, so a destination with at most 1000
+items needs at most one additional `GET` for a partial failure.
 
 ## Synchronization safety
 

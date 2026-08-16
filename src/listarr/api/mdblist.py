@@ -9,13 +9,14 @@ from typing import Any, Iterable, Sequence
 import requests
 
 from listarr.errors import APIError, RateLimitError
-from listarr.models import MediaItem, SyncResult
+from listarr.models import MediaItem, NotFoundItem, SyncResult
 
 
 @dataclass(frozen=True)
 class ExistingItem:
     provider_id: int | None
     imdb_id: str | None
+    title: str | None = None
 
 
 class MDBListClient:
@@ -188,6 +189,7 @@ class MDBListClient:
                             int(provider_id) if provider_id is not None else None
                         ),
                         imdb_id=imdb_id,
+                        title=item.get("title") or None,
                     )
                 )
 
@@ -236,6 +238,66 @@ class MDBListClient:
             return len(value)
         return 0
 
+    @staticmethod
+    def _present(
+        provider_id: int | None,
+        imdb_id: str | None,
+        provider_ids: set[int],
+        imdb_ids: set[str],
+    ) -> bool:
+        return (provider_id is not None and provider_id in provider_ids) or (
+            imdb_id is not None and imdb_id in imdb_ids
+        )
+
+    def _identify_not_found(
+        self,
+        *,
+        list_id: int,
+        source: str,
+        provider: str,
+        additions: Sequence[MediaItem],
+        removals: Sequence[ExistingItem],
+    ) -> tuple[NotFoundItem, ...]:
+        updated = self.get_items(list_id, source)
+        provider_ids = {
+            item.provider_id for item in updated if item.provider_id is not None
+        }
+        imdb_ids = {item.imdb_id for item in updated if item.imdb_id}
+        missing: list[NotFoundItem] = []
+
+        for item in additions:
+            if not self._present(
+                item.provider_id, item.imdb_id, provider_ids, imdb_ids
+            ):
+                missing.append(
+                    NotFoundItem(
+                        title=item.title,
+                        provider=provider,
+                        provider_id=item.provider_id,
+                        imdb_id=item.imdb_id,
+                    )
+                )
+
+        for item in removals:
+            if self._present(
+                item.provider_id, item.imdb_id, provider_ids, imdb_ids
+            ):
+                missing.append(
+                    NotFoundItem(
+                        title=item.title or "Existing list item",
+                        provider=provider,
+                        provider_id=item.provider_id,
+                        imdb_id=item.imdb_id,
+                    )
+                )
+
+        # A provider and IMDb ID may both identify the same item. Preserve API
+        # order while avoiding duplicate status lines.
+        unique: dict[tuple[int | None, str | None], NotFoundItem] = {}
+        for item in missing:
+            unique.setdefault((item.provider_id, item.imdb_id), item)
+        return tuple(unique.values())
+
     def sync(
         self,
         *,
@@ -262,6 +324,7 @@ class MDBListClient:
         current_imdb = {item.imdb_id for item in current if item.imdb_id}
 
         additions = []
+        addition_items: list[MediaItem] = []
         for item in items:
             already_present = item.provider_id in current_provider or (
                 item.imdb_id is not None and item.imdb_id in current_imdb
@@ -271,8 +334,10 @@ class MDBListClient:
                 if item.imdb_id:
                     payload["imdb"] = item.imdb_id
                 additions.append(payload)
+                addition_items.append(item)
 
         removals = []
+        removal_items: list[ExistingItem] = []
         if not concatenate:
             for item in current:
                 still_wanted = (
@@ -284,6 +349,7 @@ class MDBListClient:
                         removals.append({provider: item.provider_id})
                     elif item.imdb_id:
                         removals.append({"imdb": item.imdb_id})
+                    removal_items.append(item)
 
         remove_result = {
             "added": 0,
@@ -292,10 +358,61 @@ class MDBListClient:
             "not_found": 0,
         }
         add_result = remove_result.copy()
+        not_found_items: tuple[NotFoundItem, ...] = ()
         if not dry_run:
             assert list_id is not None
             remove_result = self._modify(list_id, "remove", bucket, removals)
             add_result = self._modify(list_id, "add", bucket, additions)
+            if add_result["not_found"] or remove_result["not_found"]:
+                all_additions_failed = (
+                    add_result["not_found"] == len(addition_items)
+                    and add_result["added"] == 0
+                    and add_result["existing"] == 0
+                )
+                all_removals_failed = (
+                    remove_result["not_found"] == len(removal_items)
+                    and remove_result["removed"] == 0
+                )
+                add_outcome_known = (
+                    add_result["not_found"] == 0 or all_additions_failed
+                )
+                remove_outcome_known = (
+                    remove_result["not_found"] == 0 or all_removals_failed
+                )
+
+                if add_outcome_known and remove_outcome_known:
+                    known_missing = [
+                        NotFoundItem(
+                            title=item.title,
+                            provider=provider,
+                            provider_id=item.provider_id,
+                            imdb_id=item.imdb_id,
+                        )
+                        for item in addition_items
+                        if all_additions_failed
+                    ]
+                    known_missing.extend(
+                        NotFoundItem(
+                            title=item.title or "Existing list item",
+                            provider=provider,
+                            provider_id=item.provider_id,
+                            imdb_id=item.imdb_id,
+                        )
+                        for item in removal_items
+                        if all_removals_failed
+                    )
+                    not_found_items = tuple(known_missing)
+                else:
+                    # MDBList returned only aggregate counts for a partial
+                    # failure. One conditional list read is the lowest-call
+                    # way to identify the exact items reliably.
+                    not_found_items = self._identify_not_found(
+                        list_id=list_id,
+                        source=source,
+                        provider=provider,
+                        additions=addition_items,
+                        removals=removal_items,
+                    )
 
         return SyncResult(
             source=source,
@@ -310,6 +427,7 @@ class MDBListClient:
                 add_result["not_found"] + remove_result["not_found"]
             ),
             dry_run=dry_run,
+            not_found_items=not_found_items,
         )
 
     def close(self) -> None:

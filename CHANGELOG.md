@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.2 - 2026-08-16
+
+### Added
+
+- List every concrete item MDBList could not match directly below the sync
+  status, including title, TMDB/TVDB ID, and IMDb ID when available.
+- Identify exact items after a partial `not_found` response by performing one
+  conditional, paginated list read.
+
+### Optimized
+
+- Do not perform an extra verification request when MDBList accepts every
+  item, rejects none, or rejects all attempted items. When all attempted items
+  are rejected, Listarr already knows their identities from the request.
+- Never use one lookup request per title. Partial failures require at most one
+  additional list traversal (one request per 1000 list items).
+
 ## 0.1.1 - 2026-08-16
 
 ### Fixed

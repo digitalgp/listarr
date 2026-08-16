@@ -1,5 +1,5 @@
 from listarr.cli import _display, build_parser, main
-from listarr.models import SyncResult
+from listarr.models import NotFoundItem, SyncResult
 
 
 def test_cli_keeps_familiar_source_flags():
@@ -28,23 +28,41 @@ def test_cli_displays_actual_not_found_result(capsys):
     _display(
         SyncResult(
             source="Sonarr",
-            list_id=201379,
-            selected=950,
-            planned_add=950,
+            list_id=12345,
+            selected=100,
+            planned_add=100,
             planned_remove=0,
-            added=933,
+            added=98,
             removed=0,
             existing=0,
-            not_found=17,
+            not_found=2,
             dry_run=False,
+            not_found_items=(
+                NotFoundItem(
+                    title="Rejected show",
+                    provider="tvdb",
+                    provider_id=123,
+                    imdb_id="tt123",
+                ),
+                NotFoundItem(
+                    title="Rejected without IMDb",
+                    provider="tvdb",
+                    provider_id=456,
+                    imdb_id=None,
+                ),
+            ),
         ),
         "sonarr",
     )
 
     output = capsys.readouterr().out
-    assert "Added: 933/950" in output
-    assert "Not found: 17" in output
+    assert "Added: 98/100" in output
+    assert "Not found: 2" in output
     assert "Warning:" in output
+    assert "Not found items:" in output
+    assert "Rejected show [TVDB: 123, IMDb: tt123]" in output
+    assert "Rejected without IMDb [TVDB: 456]" in output
+    assert output.index("Not found: 2") < output.index("Rejected show")
 
 
 def test_cli_displays_planned_dry_run_counts(capsys):

@@ -180,19 +180,68 @@ def test_sync_reports_actual_added_existing_and_not_found_counts():
                 "not_found": {"shows": 1},
             }
         ),
+        FakeResponse(
+            {
+                "shows": [
+                    {
+                        "title": "Accepted",
+                        "tvdb_id": 100,
+                        "imdb_id": "tt100",
+                    }
+                ],
+                "pagination": {},
+            }
+        ),
     )
     client = MDBListClient("secret", session=session)
 
     result = client.sync(
         source="Sonarr",
         list_id=5,
-        items=[media(100, "tt100"), media(200, "tt200")],
+        items=[
+            media(100, "tt100", "Accepted"),
+            media(200, "tt200", "Rejected"),
+        ],
     )
 
     assert result.planned_add == 2
     assert result.added == 1
     assert result.existing == 0
     assert result.not_found == 1
+    assert [item.title for item in result.not_found_items] == ["Rejected"]
+    assert result.not_found_items[0].provider == "tvdb"
+    assert len(session.calls) == 3
+
+
+def test_all_additions_not_found_are_known_without_extra_list_request():
+    session = FakeSession()
+    session.queue(
+        FakeResponse({"shows": [], "pagination": {}}),
+        FakeResponse(
+            {
+                "added": {"shows": 0},
+                "existing": {"shows": 0},
+                "not_found": {"shows": 2},
+            }
+        ),
+    )
+    client = MDBListClient("secret", session=session)
+
+    result = client.sync(
+        source="Sonarr",
+        list_id=5,
+        items=[
+            media(100, "tt100", "First rejected"),
+            media(200, None, "Second rejected"),
+        ],
+    )
+
+    assert result.not_found == 2
+    assert [item.title for item in result.not_found_items] == [
+        "First rejected",
+        "Second rejected",
+    ]
+    assert len(session.calls) == 2
 
 
 def test_modification_counts_are_aggregated_across_batches():
