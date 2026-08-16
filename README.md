@@ -24,8 +24,6 @@ The original and modified work are distributed under the MIT License. See
 - Rate-limit handling using MDBList's `Retry-After` response header
 - No Trakt credentials or Trakt API calls
 
-Listarr does not support Readarr because MDBList currently exposes movie and
-television list types, not books.
 
 ## Installation
 
