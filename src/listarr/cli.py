@@ -141,10 +141,25 @@ def _display(result: SyncResult, list_name: str) -> None:
     mode = "DRY RUN" if result.dry_run else "SYNCED"
     list_ref = result.list_id if result.list_id is not None else f"{list_name} (new)"
     print(f"[{result.source}] {mode} -> MDBList {list_ref}")
+    if result.dry_run:
+        print(
+            f"  Selected: {result.selected}  "
+            f"Would add: {result.planned_add}  "
+            f"Would remove: {result.planned_remove}"
+        )
+        return
+
     print(
         f"  Selected: {result.selected}  "
-        f"Add: {result.added}  Remove: {result.removed}"
+        f"Added: {result.added}/{result.planned_add}  "
+        f"Removed: {result.removed}/{result.planned_remove}  "
+        f"Existing: {result.existing}  Not found: {result.not_found}"
     )
+    if result.not_found:
+        print(
+            "  Warning: MDBList could not match some provider IDs; "
+            "those entries were not added or removed."
+        )
 
 
 def run(args: argparse.Namespace) -> int:

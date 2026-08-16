@@ -29,6 +29,10 @@ class SyncResult:
     source: str
     list_id: int | None
     selected: int
+    planned_add: int
+    planned_remove: int
     added: int
     removed: int
+    existing: int
+    not_found: int
     dry_run: bool
