@@ -97,19 +97,30 @@ class MDBListClient:
             self._enforce_privacy(list_id, private, enforce_privacy)
             return list_id
 
-        lists = self._json(
-            "GET", "/lists/user", params={"sort": "name", "unified": "true"}
-        )
+        # Do not request ``unified=true`` here. MDBList's unified response can
+        # represent a merged movie/show pair without the concrete static-list
+        # ID required by the item mutation endpoints.
+        lists = self._json("GET", "/lists/user", params={"sort": "name"})
         if not isinstance(lists, list):
             raise APIError("MDBList returned an unexpected list response")
 
-        matches = [item for item in lists if item.get("name") == name]
+        matches = [
+            item
+            for item in lists
+            if str(item.get("name", "")).casefold() == name.casefold()
+        ]
         if len(matches) > 1:
             raise APIError(
                 f"Several MDBList lists are named {name!r}; configure mdblist_list_id"
             )
         if matches:
-            resolved = int(matches[0]["id"])
+            try:
+                resolved = int(matches[0]["id"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise APIError(
+                    "MDBList list response did not include a usable ID; "
+                    "configure mdblist_list_id explicitly"
+                ) from error
             self._enforce_privacy(resolved, private, enforce_privacy)
             return resolved
         if not create:
@@ -127,6 +138,12 @@ class MDBListClient:
         self, list_id: int, private: bool, enforce_privacy: bool
     ) -> None:
         metadata = self._json("GET", f"/lists/{list_id}")
+        # The API has returned both a metadata object (documented) and a
+        # single-item list containing that object (observed in production).
+        if isinstance(metadata, list) and len(metadata) == 1:
+            metadata = metadata[0]
+        if not isinstance(metadata, dict):
+            raise APIError("MDBList returned unexpected list metadata")
         current = bool(metadata.get("private", False))
         if enforce_privacy and current != private:
             self._json(
@@ -193,13 +210,31 @@ class MDBListClient:
         action: str,
         bucket: str,
         items: Sequence[dict[str, Any]],
-    ) -> None:
+    ) -> dict[str, int]:
+        totals = {"added": 0, "removed": 0, "existing": 0, "not_found": 0}
         for batch in self._batches(items, self.BATCH_SIZE):
-            self._json(
+            response = self._json(
                 "POST",
                 f"/lists/{list_id}/items/{action}",
                 json={bucket: batch},
             )
+            if not isinstance(response, dict):
+                raise APIError("MDBList returned an unexpected modification response")
+            for field in totals:
+                totals[field] += self._response_count(response, field, bucket)
+        return totals
+
+    @staticmethod
+    def _response_count(response: dict[str, Any], field: str, bucket: str) -> int:
+        group = response.get(field, 0)
+        value = group.get(bucket, 0) if isinstance(group, dict) else group
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, (list, tuple, set)):
+            return len(value)
+        return 0
 
     def sync(
         self,
@@ -250,17 +285,30 @@ class MDBListClient:
                     elif item.imdb_id:
                         removals.append({"imdb": item.imdb_id})
 
+        remove_result = {
+            "added": 0,
+            "removed": 0,
+            "existing": 0,
+            "not_found": 0,
+        }
+        add_result = remove_result.copy()
         if not dry_run:
             assert list_id is not None
-            self._modify(list_id, "remove", bucket, removals)
-            self._modify(list_id, "add", bucket, additions)
+            remove_result = self._modify(list_id, "remove", bucket, removals)
+            add_result = self._modify(list_id, "add", bucket, additions)
 
         return SyncResult(
             source=source,
             list_id=list_id,
             selected=len(items),
-            added=len(additions),
-            removed=len(removals),
+            planned_add=len(additions),
+            planned_remove=len(removals),
+            added=add_result["added"],
+            removed=remove_result["removed"],
+            existing=add_result["existing"],
+            not_found=(
+                add_result["not_found"] + remove_result["not_found"]
+            ),
             dry_run=dry_run,
         )
 

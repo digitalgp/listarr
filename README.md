@@ -21,6 +21,7 @@ The original and modified work are distributed under the MIT License. See
 - Private MDBList creation and privacy enforcement
 - Incremental add/remove synchronization
 - Append (`--cat`), wipe, filtering, dry-run, and cursor pagination
+- Actual added, removed, existing, and not-found result reporting
 - Rate-limit handling using MDBList's `Retry-After` response header
 - No Trakt credentials or Trakt API calls
 
@@ -60,6 +61,10 @@ stored in the file.
 empty, Listarr looks up `mdblist_list_name` and creates a static list when no
 match exists. Newly created lists are private by default.
 
+Listarr performs name lookup against MDBList's concrete static-list response,
+not its merged `unified` representation. If MDBList cannot provide a writable
+ID, configure `mdblist_list_id` explicitly.
+
 ## Usage
 
 ```bash
@@ -89,6 +94,19 @@ listarr --sonarr --genre "Drama,Documentary"
 
 Run `listarr --help` for all options.
 
+After a real synchronization, Listarr reports both planned and accepted
+changes. For example:
+
+```text
+[Sonarr] SYNCED -> MDBList 201379
+  Selected: 950  Added: 933/950  Removed: 0/0  Existing: 0  Not found: 17
+  Warning: MDBList could not match some provider IDs; those entries were not added or removed.
+```
+
+`Not found` means MDBList could not match the supplied TMDB, TVDB, or IMDb ID.
+These entries remain absent from the destination list and are not counted as
+successfully added.
+
 ## Synchronization safety
 
 Normal synchronization removes stale entries only from the media type being
@@ -104,3 +122,5 @@ library. `--cat` never removes items and cannot be combined with `--wipe`.
 Listarr uses the documented static-list endpoints at
 [api.mdblist.com](https://api.mdblist.com/), including cursor pagination and
 API-key authentication. MDBList account and daily request limits still apply.
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
