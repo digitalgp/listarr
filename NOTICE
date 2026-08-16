@@ -1,0 +1,9 @@
+Listarr is based on retraktarr by zakary (GitHub user zakkarry):
+https://github.com/zakkarry/retraktarr
+
+The original project is licensed under the MIT License. Listarr retains the
+original copyright and license notice and gives credit to the original author.
+
+Listarr replaces retraktarr's Trakt destination with MDBList-specific list
+synchronization while retaining and adapting the original Arr API concept,
+filtering behavior, and command-line workflow.
