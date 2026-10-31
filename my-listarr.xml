@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>listarr</Name>
+  <Repository>listarr:local</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/digitalgp/listarr/issues</Support>
+  <Project>https://github.com/digitalgp/listarr</Project>
+  <Overview>Synchronizes Sonarr and Radarr independently to MDBList and publishes retained MQTT status and last successful run with Home Assistant discovery. Build listarr:local using the supplied Dockerfile and listarr_mqtt.py. Runs once and exits. Remove --dry-run from Post Arguments after checking logs. Schedule with docker start -a listarr. Rebuild manually to update.</Overview>
+  <Category>MediaApp:Other</Category>
+  <WebUI/>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams>--restart=no</ExtraParams>
+  <PostArgs>--all --dry-run</PostArgs>
+  <Config Name="Configuration directory" Target="/config" Default="/mnt/user/appdata/listarr" Mode="ro" Description="Directory containing listarr.conf" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/listarr</Config>
+  <Config Name="Persistent job state" Target="/state" Default="/mnt/user/appdata/listarr/state" Mode="rw" Description="Keeps last successful timestamps across container recreation" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/listarr/state</Config>
+  <Config Name="MQTT host" Target="MQTT_HOST" Default="mqtt.home.kinberg.com" Mode="" Description="MQTT broker without authentication" Type="Variable" Display="always" Required="true" Mask="false">mqtt.home.kinberg.com</Config>
+  <Config Name="MQTT port" Target="MQTT_PORT" Default="1883" Mode="" Description="MQTT broker port" Type="Variable" Display="always" Required="true" Mask="false">1883</Config>
+  <Config Name="MQTT topic" Target="MQTT_BASE_TOPIC" Default="scripts/listarr" Mode="" Description="Shared scripts root with Listarr subtopic" Type="Variable" Display="always" Required="true" Mask="false">scripts/listarr</Config>
+</Container>
