@@ -46,11 +46,14 @@ Retained QoS 1 JSON messages are published to:
 * `scripts/listarr/radarr/state`
 
 Other jobs can share the hierarchy as `scripts/<script-name>/...`.
-Each payload contains `status`, `started_at`, `finished_at`, `exit_code` and
+Each payload contains `status`, `started_at`, `finished_at`, `last_run`, `exit_code` and
 `last_success`. Timestamps use ISO 8601 with the Europe/Oslo offset.
-Home Assistant discovery creates status and last-success timestamp sensors
+Home Assistant discovery creates status, last-run and last-success timestamp sensors
 for each application. There is no availability expiry: these are retained
-job results, not a continuously running service.
+job results, not a continuously running service. `last_run` advances whenever
+a run finishes, including partial syncs, errors and dry runs; its previous
+value remains visible while the next run is running. Existing state files
+are migrated from `finished_at` automatically.
 
 Statuses: `running`, `ok`, `error`, `partial`, `timeout`, `dry_run`,
 `unconfirmed`. Only a real run with exit code zero, the `SYNCED` confirmation

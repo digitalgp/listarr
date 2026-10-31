@@ -40,7 +40,8 @@ def publish(target, state):
         if not connected.wait(15) or connection_errors:
             raise RuntimeError(f"MQTT connection failed: {connection_errors}")
         messages = []
-        for key, label in (("status", "Status"), ("last_success", "Siste vellykkede kjøring")):
+        for key, label in (("status", "Status"), ("last_run", "Siste kjøring"),
+                           ("last_success", "Siste vellykkede kjøring")):
             uid = f"listarr_{target}_{key}"
             discovery = {
                 "name": f"{target.title()} MDBList {label}",
@@ -51,7 +52,7 @@ def publish(target, state):
                            "name": f"Listarr {target.title()}",
                            "manufacturer": "Listarr", "model": "Script status"},
             }
-            if key == "last_success":
+            if key in ("last_run", "last_success"):
                 discovery["device_class"] = "timestamp"
             else:
                 discovery["json_attributes_topic"] = topic
@@ -85,6 +86,7 @@ def run_target(target, args, extra):
     path = directory / f"{target}.json"
     previous = json.loads(path.read_text()) if path.exists() else {}
     state = {"status": "running", "last_success": previous.get("last_success"),
+             "last_run": previous.get("last_run") or previous.get("finished_at"),
              "started_at": now(), "finished_at": None, "exit_code": None}
     mqtt_failed = False
 
@@ -118,10 +120,11 @@ def run_target(target, args, extra):
         state["status"] = "error"
         print(f"[ERROR] {target}: {exc}", file=sys.stderr)
     state["finished_at"] = now()
+    state["last_run"] = state["finished_at"]
     if state["status"] == "ok":
         state["last_success"] = state["finished_at"]
     save_and_publish()
-    print(f"[{target}] {state['status']}; last_success={state['last_success']}")
+    print(f"[{target}] {state['status']}; last_run={state['last_run']}; last_success={state['last_success']}")
     return state["status"] not in ("ok", "dry_run") or mqtt_failed
 
 
